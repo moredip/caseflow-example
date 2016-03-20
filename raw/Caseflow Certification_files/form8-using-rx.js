@@ -39,10 +39,73 @@ const REQUIRED_QUESTIONS = {
 
 window.Form8 = {};
 window.Form8.init = function init(){
-  watchedQuestions().forEach( function(question){
-    const input$ = streamForQuestion(question);
-    input$.subscribe( (i)=> console.log("field",question,i) );
+  showAllHiddenFields();
+
+  const fieldChanges$ = Rx.Observable.from(watchedQuestions()).flatMap( function(question){
+    const input$ = streamForQuestion(question).map( function(questionValue){
+      return {
+        question: question,
+        value: questionValue
+      };
+    });
+    return input$;
   });
+
+  const formState$ = fieldChanges$.scan(function(previousFormState,fieldChange){
+    const mutation = {}; 
+    mutation[fieldChange.question] = fieldChange.value;
+
+    return Object.assign({},previousFormState,mutation);
+  },{});
+
+  //formState$.subscribe((x)=>console.log(x));
+
+  const visibility$ = formState$.map(mapFormStateToVisibility);
+  visibility$.subscribe((x)=>console.log(x));
+
+  visibility$.subscribe( updateQuestionVisibility );
+}
+
+function mapFormStateToVisibility(formState){
+  let visibility = {};
+
+  visibility.question5B = !!formState['5A'];
+  visibility.question6B = !!formState['6A'];
+  visibility.question7B = !!formState['7A'];
+
+  ["8A3", "8C", "9A", "9B"].forEach(function(questionNumber) {
+    visibility["question" + questionNumber] = false;
+  });
+
+  switch (formState['8A2']) {
+  case "Agent":
+    visibility.question8C = true;
+    break;
+  case "Organization":
+    visibility.question9A = true;
+    visibility.question9B = (formState['9A'] === "No");
+    break;
+  case "Other":
+    visibility.question8A3 = true;
+  }
+
+  visibility.question8B2 = (formState['8B1'] === "Certification that valid POA is in another VA file");
+  visibility.question10B = visibility.question10C = (formState['10A'] === "Yes");
+  visibility.question11B = (formState['11A'] === "Yes");
+  //visibility.question132 = state.question13other;
+  
+  return visibility;
+}
+
+function updateQuestionVisibility(visibility){
+  for( const questionNumber in visibility ){
+    const shouldHide = !visibility[questionNumber];
+    const $question = $("#" + questionNumber);
+
+    $question
+      .toggleClass('hidden-field', shouldHide)
+      .find('input, textarea').prop('disabled',shouldHide);
+  }
 }
 
 function $questionField(questionNumber) {
@@ -96,6 +159,10 @@ function eventToValue(e){
 function watchedQuestions(){
   const requiredQuestionNumbers = Object.keys(REQUIRED_QUESTIONS);
   return $.unique(INTERACTIVE_QUESTIONS.concat(requiredQuestionNumbers));
+}
+
+function showAllHiddenFields(){
+  $('.hidden-field').removeClass('hidden-field');
 }
 
 })();
