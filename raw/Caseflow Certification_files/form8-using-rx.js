@@ -37,26 +37,65 @@ const REQUIRED_QUESTIONS = {
   "17C": { message: "" }
 };
 
-
+window.Form8 = {};
+window.Form8.init = function init(){
+  watchedQuestions().forEach( function(question){
+    const input$ = streamForQuestion(question);
+    input$.subscribe( (i)=> console.log("field",question,i) );
+  });
+}
 
 function $questionField(questionNumber) {
-  return $("#question" + questionNumber).find('input,textarea');
+  $question = $("#question" + questionNumber);
+
+  if( questionFieldIsAButtonset($question) ){
+    return $question;
+  }else{
+    return $question.find("input[type='text'], textarea");
+  }
 }
 
 function streamForQuestion(questionNumber){
-  return Rx.Observable.fromEvent( $questionField(questionNumber), 'input',eventToValue );
+  const $field = $questionField(questionNumber);
+
+  if( questionFieldIsAButtonset($field) ){
+    return streamForButtonSet($field);
+  }else{
+    return streamForInputField($field);
+  }
+}
+
+function questionFieldIsAButtonset($question){
+  return 'fieldset' === $question.prop("tagName").toLowerCase();
+}
+
+function streamForInputField($field){
+  return Rx.Observable.fromEvent( $field, 'input',eventToValue )
+    .startWith($field.val());
+}
+
+function streamForButtonSet($fieldset){
+  const radioStreams = $fieldset.find("input[type='radio']").map( function(ix,radio){
+    const $radio = $(radio);
+    const radioName = $radio.val();
+
+    const checkedStream = Rx.Observable.fromEvent( $radio,'change',(e)=> $(e.target).is(':checked') )
+      .startWith( $radio.is(':checked') )
+      .filter( (checked)=> checked )
+      .map( ()=> radioName );
+    return checkedStream;
+  });
+
+  return Rx.Observable.merge( ...radioStreams.toArray() );
 }
 
 function eventToValue(e){
   return $(e.target).val();
 }
 
-window.Form8 = {};
-window.Form8.init = function init(){
-  INTERACTIVE_QUESTIONS.forEach( function(question){
-    const input$ = streamForQuestion(question);
-    input$.subscribe( (i)=> console.log("field",question,i) );
-  });
+function watchedQuestions(){
+  const requiredQuestionNumbers = Object.keys(REQUIRED_QUESTIONS);
+  return $.unique(INTERACTIVE_QUESTIONS.concat(requiredQuestionNumbers));
 }
 
 })();
